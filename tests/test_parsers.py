@@ -5,7 +5,7 @@ import pytest
 
 from opt_solver import read_lp, read_mps, solve_lp_simplex
 
-DATA_DIR = Path(__file__).resolve().parents[1] / "data" / "classic"
+DATA_DIR = Path(__file__).resolve().parents[1] / "src" / "opt_solver" / "data" / "classic"
 
 
 def test_read_beale_lp() -> None:

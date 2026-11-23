@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 import numpy as np
 
 from .standard_form import to_standard_form
 from .types import FloatArray, LPProblem, Solution, Status
+
+ClassificationStatus = Literal["feasible", "infeasible", "unbounded", "numerical_error"]
+PhaseOneStatus = Literal["feasible", "infeasible", "numerical_error"]
 
 
 @dataclass
@@ -20,6 +24,23 @@ class IPMResult:
     history: list[dict[str, float]] = field(default_factory=list)
 
 
+@dataclass
+class PhaseOneResult:
+    status: PhaseOneStatus
+    objective: float
+    iterations: int
+    message: str
+
+
+@dataclass
+class ClassificationResult:
+    status: ClassificationStatus
+    iterations: int
+    message: str
+    primal_objective: float
+    dual_objective: float
+
+
 def solve_lp_ipm(
     problem: LPProblem,
     *,
@@ -29,10 +50,48 @@ def solve_lp_ipm(
 ) -> Solution:
     """Solve a linear program with Mehrotra's predictor-corrector method.
 
-    The method assumes a feasible, bounded standard-form problem.  Infeasible
-    and unbounded instances should be classified with :func:`solve_lp_simplex`.
+    A primal phase I and a dual phase I are solved before the main method.  The
+    primal phase I detects infeasibility.  If the primal is feasible but the
+    dual phase I is infeasible, the primal is unbounded.  The main
+    predictor-corrector is run only when both phase I problems are feasible.
+
+    ``max_iter`` is the limit for each interior-point call, so the total number
+    of iterations can be larger.  ``store_history`` records the main phase only.
     """
     std = to_standard_form(problem)
+    classification = _classify_standard_lp(
+        std.c,
+        std.A,
+        std.b,
+        tol=tol,
+        max_iter=max_iter,
+    )
+
+    if classification.status == "infeasible":
+        return Solution(
+            x=np.zeros(problem.n, dtype=np.float64),
+            objective=float("nan"),
+            status="infeasible",
+            iterations=classification.iterations,
+            message=classification.message,
+        )
+    if classification.status == "unbounded":
+        return Solution(
+            x=np.zeros(problem.n, dtype=np.float64),
+            objective=float("nan"),
+            status="unbounded",
+            iterations=classification.iterations,
+            message=classification.message,
+        )
+    if classification.status == "numerical_error":
+        return Solution(
+            x=np.zeros(problem.n, dtype=np.float64),
+            objective=float("nan"),
+            status="numerical_error",
+            iterations=classification.iterations,
+            message=classification.message,
+        )
+
     result = mehrotra(
         std.c,
         std.A,
@@ -41,14 +100,16 @@ def solve_lp_ipm(
         max_iter=max_iter,
         store_history=store_history,
     )
+    total_iterations = classification.iterations + result.iterations
+    message = f"{classification.message} {result.message}"
 
     if result.status != "optimal":
         return Solution(
             x=np.zeros(problem.n, dtype=np.float64),
             objective=float("nan"),
             status=result.status,
-            iterations=result.iterations,
-            message=result.message,
+            iterations=total_iterations,
+            message=message,
             history=result.history,
         )
 
@@ -56,8 +117,8 @@ def solve_lp_ipm(
         x=std.recover(result.x),
         objective=std.objective(result.x),
         status="optimal",
-        iterations=result.iterations,
-        message=result.message,
+        iterations=total_iterations,
+        message=message,
         history=result.history,
     )
 
@@ -97,6 +158,23 @@ def mehrotra(
             status="optimal",
             iterations=0,
             message="No constraints.",
+        )
+
+    if n == 0:
+        if np.all(np.abs(b) <= tol):
+            return IPMResult(
+                x=np.zeros(0, dtype=np.float64),
+                objective=0.0,
+                status="optimal",
+                iterations=0,
+                message="No variables and consistent rows.",
+            )
+        return IPMResult(
+            x=np.zeros(0, dtype=np.float64),
+            objective=float("nan"),
+            status="infeasible",
+            iterations=0,
+            message="No variables and inconsistent rows.",
         )
 
     # Row scaling improves the conditioning of A D A^T without changing x.
@@ -205,6 +283,209 @@ def mehrotra(
         message="Reached the iteration limit without meeting the KKT tolerance.",
         history=history,
     )
+
+
+def _classify_standard_lp(
+    c: FloatArray,
+    A: FloatArray,
+    b: FloatArray,
+    *,
+    tol: float,
+    max_iter: int,
+) -> ClassificationResult:
+    primal = _primal_phase_one(A, b, tol=tol, max_iter=max_iter)
+    if primal.status == "infeasible":
+        return ClassificationResult(
+            status="infeasible",
+            iterations=primal.iterations,
+            message=primal.message,
+            primal_objective=primal.objective,
+            dual_objective=float("nan"),
+        )
+    if primal.status == "numerical_error":
+        return ClassificationResult(
+            status="numerical_error",
+            iterations=primal.iterations,
+            message=primal.message,
+            primal_objective=primal.objective,
+            dual_objective=float("nan"),
+        )
+
+    dual = _dual_phase_one(A, c, tol=tol, max_iter=max_iter)
+    if dual.status == "infeasible":
+        message = (
+            f"Primal phase I is feasible (artificial sum {primal.objective:.2e}). "
+            f"Dual phase I is positive (artificial sum {dual.objective:.2e}), "
+            "so the primal is unbounded."
+        )
+        return ClassificationResult(
+            status="unbounded",
+            iterations=primal.iterations + dual.iterations,
+            message=message,
+            primal_objective=primal.objective,
+            dual_objective=dual.objective,
+        )
+    if dual.status == "numerical_error":
+        message = (
+            f"Primal phase I is feasible (artificial sum {primal.objective:.2e}). "
+            f"Dual phase I did not converge (artificial sum {dual.objective:.2e})."
+        )
+        return ClassificationResult(
+            status="numerical_error",
+            iterations=primal.iterations + dual.iterations,
+            message=message,
+            primal_objective=primal.objective,
+            dual_objective=dual.objective,
+        )
+
+    message = (
+        "Both phase I problems are feasible "
+        f"(primal artificial sum {primal.objective:.2e}, "
+        f"dual artificial sum {dual.objective:.2e})."
+    )
+    return ClassificationResult(
+        status="feasible",
+        iterations=primal.iterations + dual.iterations,
+        message=message,
+        primal_objective=primal.objective,
+        dual_objective=dual.objective,
+    )
+
+
+def _primal_phase_one(
+    A: FloatArray,
+    b: FloatArray,
+    *,
+    tol: float,
+    max_iter: int,
+) -> PhaseOneResult:
+    """Minimize the sum of artificial variables in ``A x + a = b``."""
+    A = np.asarray(A, dtype=np.float64).copy()
+    b = np.asarray(b, dtype=np.float64).copy()
+    m, n = A.shape
+    if b.size != m:
+        raise ValueError("b must have one entry per row of A")
+
+    phase_tol = _phase_tolerance(tol)
+    if m == 0:
+        return PhaseOneResult(
+            status="feasible",
+            objective=0.0,
+            iterations=0,
+            message="No equality rows, so the primal is feasible.",
+        )
+
+    # Equality rows may be multiplied by -1 without changing the feasible set.
+    for i in range(m):
+        if b[i] < 0.0:
+            A[i, :] = -A[i, :]
+            b[i] = -b[i]
+
+    A_aug = np.hstack([A, np.eye(m, dtype=np.float64)])
+    c_aug = np.concatenate([np.zeros(n, dtype=np.float64), np.ones(m, dtype=np.float64)])
+    result = mehrotra(c_aug, A_aug, b, tol=tol, max_iter=max_iter)
+    objective = max(0.0, float(result.objective))
+
+    if objective <= phase_tol:
+        return PhaseOneResult(
+            status="feasible",
+            objective=objective,
+            iterations=result.iterations,
+            message=(
+                f"Primal phase I is feasible (artificial sum {objective:.2e}, "
+                f"{result.status})."
+            ),
+        )
+    if result.status == "optimal":
+        return PhaseOneResult(
+            status="infeasible",
+            objective=objective,
+            iterations=result.iterations,
+            message=(
+                f"Primal phase I is positive (artificial sum {objective:.2e} "
+                f"> {phase_tol:.1e})."
+            ),
+        )
+    return PhaseOneResult(
+        status="numerical_error",
+        objective=objective,
+        iterations=result.iterations,
+        message=(
+            f"Primal phase I did not converge and its artificial sum is "
+            f"{objective:.2e} ({result.status})."
+        ),
+    )
+
+
+def _dual_phase_one(
+    A: FloatArray,
+    c: FloatArray,
+    *,
+    tol: float,
+    max_iter: int,
+) -> PhaseOneResult:
+    """Minimize the sum of artificial variables in ``A^T y + s - u = c``."""
+    A = np.asarray(A, dtype=np.float64)
+    c = np.asarray(c, dtype=np.float64)
+    m, n = A.shape
+    if c.size != n:
+        raise ValueError("c must have one entry per column of A")
+
+    phase_tol = _phase_tolerance(tol)
+    if n == 0:
+        return PhaseOneResult(
+            status="feasible",
+            objective=0.0,
+            iterations=0,
+            message="No dual constraints, so the dual is feasible.",
+        )
+
+    A_transpose = A.T
+    identity = np.eye(n, dtype=np.float64)
+    A_dual = np.hstack([A_transpose, -A_transpose, identity, -identity])
+    c_dual = np.concatenate(
+        [
+            np.zeros(2 * m, dtype=np.float64),
+            np.zeros(n, dtype=np.float64),
+            np.ones(n, dtype=np.float64),
+        ]
+    )
+    result = mehrotra(c_dual, A_dual, c, tol=tol, max_iter=max_iter)
+    objective = max(0.0, float(result.objective))
+
+    if objective <= phase_tol:
+        return PhaseOneResult(
+            status="feasible",
+            objective=objective,
+            iterations=result.iterations,
+            message=(
+                f"Dual phase I is feasible (artificial sum {objective:.2e}, "
+                f"{result.status})."
+            ),
+        )
+    if result.status == "optimal":
+        return PhaseOneResult(
+            status="infeasible",
+            objective=objective,
+            iterations=result.iterations,
+            message=(
+                f"Dual phase I is positive (artificial sum {objective:.2e} "
+                f"> {phase_tol:.1e})."
+            ),
+        )
+    return PhaseOneResult(
+        status="numerical_error",
+        objective=objective,
+        iterations=result.iterations,
+        message=(
+            f"Dual phase I did not converge and its artificial sum is "
+            f"{objective:.2e} ({result.status})."
+        ),
+    )
+
+
+def _phase_tolerance(tol: float) -> float:
+    return max(1e-8, 10.0 * tol)
 
 
 def _solve_spd(matrix: FloatArray, rhs: FloatArray) -> FloatArray:

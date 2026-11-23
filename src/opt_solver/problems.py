@@ -9,7 +9,7 @@ import numpy as np
 from .parsers import read_lp, read_mps
 from .types import LPProblem, QPProblem
 
-_DATA_DIR = Path(__file__).resolve().parents[2] / "data" / "classic"
+_DATA_DIR = Path(__file__).resolve().parent / "data" / "classic"
 
 
 def beale() -> LPProblem:

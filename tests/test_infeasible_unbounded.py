@@ -1,6 +1,6 @@
 import numpy as np
 
-from opt_solver import LPProblem, solve_lp_simplex
+from opt_solver import LPProblem, solve_lp_ipm, solve_lp_simplex
 
 
 def test_infeasible_inequalities() -> None:
@@ -12,9 +12,11 @@ def test_infeasible_inequalities() -> None:
         lb=np.array([0.0]),
         ub=np.array([np.inf]),
     )
-    solution = solve_lp_simplex(problem)
+    simplex = solve_lp_simplex(problem)
+    ipm = solve_lp_ipm(problem)
 
-    assert solution.status == "infeasible"
+    assert simplex.status == "infeasible"
+    assert ipm.status == "infeasible"
 
 
 def test_infeasible_equalities() -> None:
@@ -26,9 +28,11 @@ def test_infeasible_equalities() -> None:
         lb=np.array([0.0]),
         ub=np.array([np.inf]),
     )
-    solution = solve_lp_simplex(problem)
+    simplex = solve_lp_simplex(problem)
+    ipm = solve_lp_ipm(problem)
 
-    assert solution.status == "infeasible"
+    assert simplex.status == "infeasible"
+    assert ipm.status == "infeasible"
 
 
 def test_unbounded_without_rows() -> None:
@@ -40,9 +44,11 @@ def test_unbounded_without_rows() -> None:
         lb=np.array([0.0]),
         ub=np.array([np.inf]),
     )
-    solution = solve_lp_simplex(problem)
+    simplex = solve_lp_simplex(problem)
+    ipm = solve_lp_ipm(problem)
 
-    assert solution.status == "unbounded"
+    assert simplex.status == "unbounded"
+    assert ipm.status == "unbounded"
 
 
 def test_unbounded_inside_a_cone() -> None:
@@ -54,6 +60,8 @@ def test_unbounded_inside_a_cone() -> None:
         lb=np.zeros(2),
         ub=np.full(2, np.inf),
     )
-    solution = solve_lp_simplex(problem)
+    simplex = solve_lp_simplex(problem)
+    ipm = solve_lp_ipm(problem)
 
-    assert solution.status == "unbounded"
+    assert simplex.status == "unbounded"
+    assert ipm.status == "unbounded"
