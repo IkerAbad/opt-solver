@@ -2,6 +2,8 @@
 
 [![CI](https://github.com/IkerAbad/opt-solver/actions/workflows/ci.yml/badge.svg)](https://github.com/IkerAbad/opt-solver/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/iker-opt-solver.svg)](https://pypi.org/project/iker-opt-solver/)
+[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/IkerAbad/opt-solver/blob/main/LICENSE)
 
 Linear and convex quadratic optimization from scratch, with two methods per problem and an honest comparison against HiGHS.
 
@@ -12,6 +14,10 @@ Linear and convex quadratic optimization from scratch, with two methods per prob
 - **Figures:** interior-point convergence, sensitivity to coefficients, and scaling.
 
 The PyPI distribution is `iker-opt-solver` because `opt-solver` is already taken on PyPI. The import package is `opt_solver`.
+
+```bash
+pip install iker-opt-solver
+```
 
 ## Why Python 3.12 + NumPy
 
