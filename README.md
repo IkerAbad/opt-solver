@@ -1,7 +1,7 @@
 # opt-solver
 
 [![CI](https://github.com/IkerAbad/opt-solver/actions/workflows/ci.yml/badge.svg)](https://github.com/IkerAbad/opt-solver/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/iker-opt-solver.svg)](https://pypi.org/project/iker-opt-solver/)
+[![PyPI](https://img.shields.io/pypi/v/optkit.svg)](https://pypi.org/project/optkit/)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/downloads/release/python-3120/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/IkerAbad/opt-solver/blob/main/LICENSE)
 
@@ -13,10 +13,10 @@ Linear and convex quadratic optimization from scratch, with two methods per prob
 - **Benchmark:** objective accuracy, iterations and wall-clock time against HiGHS on classic and generated instances.
 - **Figures:** interior-point convergence, sensitivity to coefficients, and scaling.
 
-The PyPI distribution is `iker-opt-solver` because `opt-solver` is already taken on PyPI. The import package is `opt_solver`.
+The PyPI distribution is `optkit` because `opt-solver` is already taken on PyPI. The import package is `opt_solver`.
 
 ```bash
-pip install iker-opt-solver
+pip install optkit
 ```
 
 ## Why Python 3.12 + NumPy
@@ -30,7 +30,7 @@ A C++/Eigen version would be faster, but it would move most of the effort into b
 From PyPI:
 
 ```bash
-pip install iker-opt-solver
+pip install optkit
 ```
 
 For development, from a clone:

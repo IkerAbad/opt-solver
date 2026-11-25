@@ -3,8 +3,8 @@ requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "iker-opt-solver"
-version = "0.1.0"
+name = "optkit"
+version = "0.1.1"
 description = "Linear and convex quadratic optimization from scratch, benchmarked against HiGHS."
 readme = "README.md"
 requires-python = ">=3.12"
